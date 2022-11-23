@@ -24,6 +24,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   late TextEditingController _name;
 
+  @override
   void initState() {
     super.initState();
     _name = TextEditingController();
@@ -50,7 +51,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     ref.listen<AsyncValue<void>>(
       registerControllerProvider,
       (_, state) => state.whenOrNull(
-        data: (data) => Navigator.pushNamed(context, ChatScreen.id),
+        data: (data) => Navigator.pushReplacementNamed(context, ChatScreen.id),
       ),
     );
     return SafeArea(
@@ -69,24 +70,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       controller: _name,
                       keyboardType: TextInputType.name,
                       decoration: const InputDecoration(
-                        hintStyle: TextStyle(color: Colors.white70),
-                        filled: true,
-                        fillColor: Color(0xff19182A),
                         hintText: 'Username',
-                        enabledBorder: OutlineInputBorder(
-                          borderSide:
-                              BorderSide(color: Colors.deepPurple, width: 1.0),
-                          borderRadius: BorderRadius.all(Radius.circular(
-                            15,
-                          )),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderSide:
-                              BorderSide(color: Colors.deepPurple, width: 1.0),
-                          borderRadius: BorderRadius.all(Radius.circular(
-                            15,
-                          )),
-                        ),
                       ),
                       validator: (value) {
                         if (value == null || value.isEmpty) {

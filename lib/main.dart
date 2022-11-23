@@ -36,11 +36,29 @@ class MyApp extends StatelessWidget {
         // is not restarted.
 
         primarySwatch: Colors.deepPurple,
-        scaffoldBackgroundColor: const Color(0xff11131E),
+        scaffoldBackgroundColor: const Color(0xff110F19),
         textTheme: Theme.of(context).textTheme.apply(
               bodyColor: Colors.white,
               displayColor: Colors.white,
             ),
+        inputDecorationTheme: const InputDecorationTheme(
+          hintStyle: TextStyle(color: Colors.white70),
+          labelStyle: TextStyle(color: Colors.white70),
+          filled: true,
+          fillColor: Color(0xff19182A),
+          enabledBorder: OutlineInputBorder(
+            borderSide: BorderSide(color: Colors.deepPurple, width: 1.0),
+            borderRadius: BorderRadius.all(Radius.circular(
+              15,
+            )),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderSide: BorderSide(color: Colors.deepPurple, width: 1.0),
+            borderRadius: BorderRadius.all(Radius.circular(
+              15,
+            )),
+          ),
+        ),
       ),
       initialRoute: username == null ? RegisterScreen.id : ChatScreen.id,
       routes: {
