@@ -1,39 +1,65 @@
-import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:web_socket_channel/web_socket_channel.dart';
+import 'dart:convert';
 
-class ChatScreen extends StatefulWidget {
+import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:openchat/data/chat/message_repo.dart';
+import 'package:openchat/model/chat/chat_message.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../data/chat/chat_websocket.dart';
+
+final messageStreamProvider = StreamProvider.autoDispose<dynamic>((ref) {
+  return ChatWebSocket.getInstance().getMessageStream();
+});
+final messageListProvider =
+    FutureProvider.autoDispose<List<String>?>((ref) async {
+  final message = await ref.watch(messageStreamProvider.future);
+  final prefs = await SharedPreferences.getInstance();
+  print('message ${prefs.getStringList('chat_message')}');
+
+  List<String>? previousMessageList = prefs.getStringList('chat_message');
+  List<String> messageList = [message.toString()];
+  List<String> newList = [];
+  if (previousMessageList != null) {
+    newList = List.from(previousMessageList)..addAll(messageList);
+  } else {
+    newList.addAll(messageList);
+  }
+  await prefs.setStringList('chat_message', newList);
+  return newList;
+});
+
+class ChatScreen extends ConsumerStatefulWidget {
   static String id = 'chatscreen';
   const ChatScreen({
     super.key,
   });
 
   @override
-  State<ChatScreen> createState() => _ChatScreenState();
+  ConsumerState<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen> {
+class _ChatScreenState extends ConsumerState<ChatScreen> {
+  ScrollController scrollController = ScrollController();
   late TextEditingController _controller;
-  late WebSocketChannel _channel;
-
+  bool needScroll = false;
   @override
   void initState() {
     super.initState();
     _controller = TextEditingController();
-    _channel = WebSocketChannel.connect(
-      Uri.parse('ws://localhost:8080/name'),
-    );
   }
 
   @override
   void dispose() {
-    _channel.sink.close();
     _controller.dispose();
+    ChatWebSocket.getInstance().closeWebSocket();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final messageList = ref.watch(messageListProvider);
     return Scaffold(
       body: Padding(
         padding: const EdgeInsets.all(20.0),
@@ -65,7 +91,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         Expanded(
-                          flex: 3,
+                          flex: 5,
                           child: Container(
                             decoration: const BoxDecoration(
                               gradient: LinearGradient(
@@ -84,18 +110,23 @@ class _ChatScreenState extends State<ChatScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Text(
-                                    'Welcome to Open Chat',
-                                    style: TextStyle(
-                                      color: Color(0xff3D88CD),
+                                  const Flexible(
+                                    child: Text(
+                                      'Welcome to Open Chat',
+                                      style: TextStyle(
+                                        color: Color(0xff3D88CD),
+                                      ),
                                     ),
                                   ),
-                                  Text(
-                                    'We can now freely collaborate on our project. Any question about the documentation or project? Please feel free to discuss any issue.',
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                        color: Colors.white60.withOpacity(0.3)),
+                                  Flexible(
+                                    child: Text(
+                                      'We can now freely collaborate on our project. Any question about the documentation or project? Please feel free to discuss any issue.',
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                          color:
+                                              Colors.white60.withOpacity(0.3)),
+                                    ),
                                   ),
                                 ],
                               ),
@@ -103,16 +134,30 @@ class _ChatScreenState extends State<ChatScreen> {
                           ),
                         ),
                         Expanded(
-                          flex: 10,
-                          child: StreamBuilder(
-                            stream: _channel.stream,
-                            builder: (context, snapshot) {
-                              print(snapshot.error);
-                              return Text(
-                                  snapshot.hasData ? '${snapshot.data}' : '');
-                            },
-                          ),
-                        ),
+                            flex: 10,
+                            child: messageList.when(data: (data) {
+                              List<ChatMessage>? chatMessageList =
+                                  data?.map((element) {
+                                final data = jsonDecode(element);
+                                return ChatMessage(
+                                    data['username'], data['message']);
+                              }).toList();
+                              return ListView.builder(
+                                padding: const EdgeInsets.all(20),
+                                controller: scrollController,
+                                itemCount: chatMessageList?.length,
+                                itemBuilder: (context, index) {
+                                  return Container(
+                                    child:
+                                        Text(chatMessageList![index].message),
+                                  );
+                                },
+                              );
+                            }, error: (obj, stake) {
+                              return const Text('Service unavailable');
+                            }, loading: () {
+                              return Text('');
+                            })),
                         Expanded(
                           child: Row(
                             children: [
@@ -128,7 +173,27 @@ class _ChatScreenState extends State<ChatScreen> {
                               ),
                               Expanded(
                                 child: IconButton(
-                                  onPressed: () {},
+                                  onPressed: () async {
+                                    final prefs =
+                                        await SharedPreferences.getInstance();
+                                    if (_controller.text.isNotEmpty) {
+                                      ChatWebSocket.getInstance().sendMessage(
+                                        prefs.getString('username')!,
+                                        _controller.text,
+                                      );
+                                    }
+
+                                    await Future.delayed(
+                                        const Duration(milliseconds: 100));
+                                    SchedulerBinding.instance
+                                        .addPostFrameCallback((_) {
+                                      scrollController.animateTo(
+                                          scrollController
+                                              .position.maxScrollExtent,
+                                          duration: Duration(milliseconds: 1),
+                                          curve: Curves.fastOutSlowIn);
+                                    });
+                                  },
                                   icon: const Icon(Icons.send),
                                 ),
                               ),
@@ -154,12 +219,5 @@ class _ChatScreenState extends State<ChatScreen> {
       thickness: 1,
       color: Colors.white12,
     );
-  }
-
-  void _sendMessage() {
-    if (_controller.text.isNotEmpty) {
-      print('sending message');
-      _channel.sink.add(_controller.text);
-    }
   }
 }
