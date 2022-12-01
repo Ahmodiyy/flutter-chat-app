@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:openchat/model/chat/chat_message.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -9,41 +8,24 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../data/chat/chat_repo.dart';
 import '../../data/chat/chat_websocket.dart';
 
-final messageStreamProvider = StreamProvider.autoDispose<dynamic>((ref) {
+final messageStreamProvider = StreamProvider<dynamic>((ref) {
   return ChatWebSocket.getInstance().getMessageStream();
 });
 
-final isFirstLoadProvider = StateProvider<bool>((ref) {
-  return true;
-});
-
-final messageListProvider =
-    FutureProvider.autoDispose<List<String>?>((ref) async {
+final messageListProvider = FutureProvider<List<String>?>((ref) async {
   List<String> newList = [];
   ChatRepo chatRepo = ChatRepo();
-  bool isContainKey = await chatRepo.isContainKey();
-  if (!isContainKey) {
-    final message = await ref.watch(messageStreamProvider.future);
-    newList.add(message.toString());
+  final message = await ref.watch(messageStreamProvider.future);
+  List<String>? chatMessages = await chatRepo.getChatMessages();
+  List<String> messageList = [message.toString()];
+  if (chatMessages == null) {
+    newList.addAll(messageList);
     chatRepo.setChatMessages(newList);
     return newList;
-  } else {
-    return chatRepo.getChatMessages();
   }
-
-  // print('2 ${ref.watch(isFirstLoadProvider)}');
-  // if (!ref.watch(isFirstLoadProvider)) {
-  //   final message = await ref.watch(messageStreamProvider.future);
-  //   List<String>? chatMessages = await chatRepo.getChatMessages();
-  //   List<String> messageList = [message.toString()];
-  //   print('item 1: ${chatMessages?.length}');
-  //   print('item 2: ${messageList.length}');
-  //   newList = List.from(chatMessages!)..addAll(messageList);
-  //
-  //   chatRepo.setChatMessages(newList);
-  // }
-  //
-  // return newList;
+  newList = List.from(chatMessages)..addAll(messageList);
+  chatRepo.setChatMessages(newList);
+  return newList;
 });
 
 class ChatScreen extends ConsumerStatefulWidget {
@@ -67,12 +49,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     super.initState();
     _controller = TextEditingController();
     getUsername();
-    scrollController.addListener(() {
-      print('inside listener');
-      if (scrollController.position.atEdge) {
-        scrollController.jumpTo(scrollController.position.maxScrollExtent);
-      }
-    });
   }
 
   @override
@@ -89,13 +65,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // WidgetsBinding.instance.addPostFrameCallback((duration) {
-    //   print(duration.inSeconds.toString());
-    //   print('scroll controller ${scrollController.positions.isNotEmpty}');
-    //   if (scrollController.hasClients) {
-    //     scrollController.jumpTo(scrollController.position.maxScrollExtent);
-    //   }
-    // });
+    WidgetsBinding.instance.addPersistentFrameCallback((timeStamp) {
+      print('scroll  controller ${scrollController.positions.isNotEmpty}');
+      if (scrollController.hasClients) {
+        scrollController.jumpTo(scrollController.position.maxScrollExtent);
+      }
+    });
 
     final messageList = ref.watch(messageListProvider);
     return Scaffold(
@@ -144,7 +119,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                               ),
                             ),
                             child: Padding(
-                              padding: const EdgeInsets.all(20.0),
+                              padding: const EdgeInsets.all(10.0),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
